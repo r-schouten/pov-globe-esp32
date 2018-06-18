@@ -17,13 +17,16 @@ struct udpData
   int imageLength=0;
 }udpData;
 uint8_t unDecodedImage[20000];
+int imageLength=0;
+
 byte* incomingPacket;
 
 int part=0;
 int lastPart=10;
-int rotationPart=0;
-int rotation=0;
-int rotationFactor=0;
+double rotationPart=0;
+double rotationPartOld=0;
+double rotation=0;
+double rotationFactor=0;
 uint32_t *ledData1 = new uint32_t[128*16];
 uint32_t *ledData2 = new uint32_t[128*16];
 //switching pointers
@@ -36,42 +39,37 @@ uint8_t jpegImagePart=0;
 bool jpegInitialized=false;
 bool jpegInitialized2=false;
 bool needReconstruction=true;
-void printArray(uint8_t* data)
-{
-   for(int i=0;i<146;i++)
-   {
-     Serial.print(data[i],HEX);
-     Serial.print(" ");
-   }Serial.println();
-}
+
 void reconstructImage()
 {
-long startTime=micros();
-  Serial.println("reconstructing Image");
+  long startTime=micros();
+  //Serial.println("reconstructing Image");
   udpData.imageLength=0;
-  for(uint8_t packet=0;packet<=udpData.index;packet++)
-  {
+  //for(uint8_t packet=0;packet<=udpData.index;packet++)
+  //{
     for(uint8_t i=0;i<= udpData.index;i++)
     {
-       if(udpData.imageData[i][3]==packet)
-       {
+       //if(udpData.imageData[i][3]==packet)
+       //{
           int length = (uint32_t) udpData.imageData[i][1] << 8 | (uint32_t) udpData.imageData[i][2];
           memcpy(unDecodedImage+udpData.imageLength,udpData.imageData[i]+10,length);
           //Serial.print(udpData.imageData[i][3]);
           //Serial.print("  ");
           //Serial.println(length);
          udpData.imageLength+=length;
-         break;
-       }
-    }
+        // break;
+       //}
+    //}
+
   }
+  imageLength=udpData.imageLength;
   //Serial.print("image copy time:");
   //Serial.println(micros()-startTime);
 
 }
 void initializeJPEG()
 {
-  JpegDec.decodeArray(unDecodedImage,udpData.imageLength);
+  JpegDec.decodeArray(unDecodedImage,imageLength);
    /*String header = "width:";
    header += JpegDec.width;
    header += ", height:";
@@ -85,7 +83,6 @@ void initializeJPEG()
    header += ", MCUHeight:";
    header += JpegDec.MCUHeight;
    Serial.println(header);*/
-   jpegImagePart=0;
 }
 void decodeRow()
 {
@@ -93,7 +90,7 @@ void decodeRow()
      for(int mcuRow=0;mcuRow<8;mcuRow++)
      {
        bool status = JpegDec.read(imagePointer);
-       if(!status)Serial.println("end of image");
+       //if(!status)Serial.println("end of image");
        imagePointer+=16*16;
      }
      /*imagePointer=ledBuffer;
@@ -152,42 +149,58 @@ void receivePacket()
 {
   int packetSize = Udp.myRead(incomingPacket);
   if (packetSize){//when a packet is received
-    if(udpData.index==0)
-    {
-        udpData.StartTime=micros();
-    }
-    int length = (uint32_t) incomingPacket[1] << 8 | (uint32_t) incomingPacket[2];
+      if(incomingPacket[0]==0)
+      {
+        if(udpData.index==0)
+        {
+            udpData.StartTime=micros();
+        }
+        int length = (uint32_t) incomingPacket[1] << 8 | (uint32_t) incomingPacket[2];
 
-    if(incomingPacket[5]!=udpData.flowLabel)
-    {
-      udpData.flowLabel=incomingPacket[5];
-      udpData.index=0;
-    }
-    /*Serial.print(length);
-    Serial.print("  ");
-    Serial.print(udpData.index);
-    Serial.print("  ");
-    Serial.print(incomingPacket[3]);
-    Serial.print("  ");
-    Serial.println(incomingPacket[4]);*/
-    if(incomingPacket[4]==udpData.index+1){
-      rotationFactor=incomingPacket[6]-128;
-      //Serial.printf("\nimage receiving time: %i\n",micros()-udpData.StartTime);
-      long starttime=micros();
-      needReconstruction=true;
-      reconstructImage();
-      udpData.index=0;
-      incomingPacket=udpData.imageData[udpData.index];
-      return;
-    }
-    udpData.index++;
-    incomingPacket=udpData.imageData[udpData.index];
+        if(incomingPacket[5]!=udpData.flowLabel)
+        {
+          udpData.flowLabel=incomingPacket[5];
+          udpData.index=0;
+        }
+        /*Serial.print(length);
+        Serial.print("  ");
+        Serial.print(udpData.index);
+        Serial.print("  ");
+        Serial.print(incomingPacket[3]);
+        Serial.print("  ");
+        Serial.println(incomingPacket[4]);*/
+        if(incomingPacket[4]==udpData.index+1){
 
+          //Serial.printf("\nimage receiving time: %i\n",micros()-udpData.StartTime);
+          needReconstruction=true;
+          reconstructImage();
+          udpData.index=0;
+          incomingPacket=udpData.imageData[udpData.index];
+          return;
+        }
+        udpData.index++;
+        incomingPacket=udpData.imageData[udpData.index];
+      }
+      else if(incomingPacket[0]==1)
+      {
+        rotationFactor=(incomingPacket[2]-128.0)/200.0;
+        JpegDec.brighness=(223+incomingPacket[3]);
+        if(JpegDec.gamma!=incomingPacket[4])
+        {
+          JpegDec.gamma=incomingPacket[4];
+          JpegDec.calculateGamma();
+        }
+      }
   }
 }
+IPAddress ip(192,168,137,100);
+IPAddress gateway(192,168,137,1);
+IPAddress subnet(255, 255, 255, 0);
 void jpegSetup()
 {
-
+  if (!WiFi.config(ip, gateway, subnet)) {
+    Serial.println("STA Failed to configure");
+  }
   Serial.printf("Connecting to %s ", ssid);
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED){
@@ -198,6 +211,7 @@ void jpegSetup()
   Udp.begin(localUdpPort);
    Serial.printf("Now listening at IP %s, UDP port %d\n", WiFi.localIP().toString().c_str(), localUdpPort);
    incomingPacket=udpData.imageData[udpData.index];
+   JpegDec.calculateGamma();
    memset(ledData1,0,16*128*4);
    memset(ledData2,0,16*128*4);
 }
@@ -211,9 +225,18 @@ void jpegLoop(void * pvParameters)
     {
       jpegInitialized=true;
       JpegDec.abort();
-      initializeJPEG();
       //Serial.println("intialize jpeg");
+      //uint32_t startTime3=micros();
+      initializeJPEG();
+      //Serial.println(micros()-startTime3);
+      //needNewJPEG=false;
+    }
+    if(needNewJPEG){
       needNewJPEG=false;
+      //Serial.print("decode ");
+      //Serial.println(jpegImagePart);
+      //uint32_t startTime2=micros();
+      decodeRow();
       rotation+=rotationFactor;
       if(rotation>255)
       {
@@ -223,12 +246,8 @@ void jpegLoop(void * pvParameters)
       {
         rotation+=256;
       }
-    }
-    if(needNewJPEG){
-      needNewJPEG=false;
-      //Serial.print("decode ");
-      //Serial.println(jpegImagePart);
-      decodeRow();
+      //Serial.println(micros()-startTime2);
+
     }
     vTaskDelay(1);
   }

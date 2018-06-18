@@ -9,8 +9,6 @@
 #include "LedCore.h"
 #include "soc/soc.h"
 #include "soc/rtc_cntl_reg.h"
-
-long oldTime=micros();
 void setup()
 {
   Serial.begin(2000000);
@@ -26,7 +24,7 @@ void setup()
                     NULL,
                     0);
   xTaskCreatePinnedToCore(
-                    ledControlLoop,
+                    ledControlLoop/*ledCoreSimulation*/,
                     "led control",
                     40000,
                     NULL,
@@ -37,5 +35,5 @@ void setup()
 
 void loop()
 {
-  delay(100000);
+  delay(10000);
 }

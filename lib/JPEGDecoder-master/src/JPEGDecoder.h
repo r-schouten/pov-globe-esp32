@@ -28,7 +28,7 @@ enum {
 	JPEG_SD_FILE
 };
 
-#define DEBUG
+//#define DEBUG
 
 //------------------------------------------------------------------------------
 #ifndef jpg_min
@@ -61,7 +61,9 @@ public:
 	uint8 status;
 	uint8 jpg_source = 0;
 	uint8_t* jpg_data;
-
+	uint8_t brighness=31;
+	uint8_t gamma=128;
+	uint8_t gamma8[256];
 	static uint8 pjpeg_callback(unsigned char* pBuf, unsigned char buf_size, unsigned char *pBytes_actually_read, void *pCallback_data);
 	uint8 pjpeg_need_bytes_callback(unsigned char* pBuf, unsigned char buf_size, unsigned char *pBytes_actually_read, void *pCallback_data);
 	int decode_mcu(void);
@@ -88,8 +90,10 @@ public:
 	int available(void);
 	int read(uint32_t *pImage);
 
-	int decodeArray(const uint8_t array[], uint32_t  array_size);
+	int decodeArray(uint8_t array[], uint32_t  array_size);
 	void abort(void);
+
+	void calculateGamma();
 
 };
 

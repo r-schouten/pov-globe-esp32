@@ -2,6 +2,7 @@
 #include <SPI.h>
 #define interruptPin 25
 
+//#define SIMULATE
 uint32_t lastInteruptTime=0;
 uint32_t totalRoundTime;
 uint32_t partTime;
@@ -28,6 +29,12 @@ void ledControlSetup()
   SPI2.beginTransaction(SPISettings(20000000, MSBFIRST, SPI_MODE0));
   pinMode(interruptPin, INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(interruptPin), handleInterrupt, FALLING);
+
+  #ifdef SIMULATE
+  pinMode(26, OUTPUT);
+  digitalWrite(26,HIGH);
+  #endif
+
   uint32_t ledsOff[16];
   for(int i=0;i<16;i++)
   {
@@ -57,7 +64,7 @@ void showLeds()
   SPI.write16x32(ledDataDepricated[part]+16);
   SPI.write16x32(ledDataDepricated[part]+32);
   SPI.write16x32(ledDataDepricated[part]+48);*/
-  uint32_t *imagePointer=ledData+(rotationPart%16)*16;
+  uint32_t *imagePointer=ledData+((int)rotationPart%16)*16;
   uint32_t *imagePointer2=imagePointer;
   SPI.write16x32(imagePointer2);
   imagePointer2=imagePointer+16*16*4;
@@ -82,20 +89,29 @@ void showLeds()
   SPI2.write32(0xFFFFFFFF);
   SPI.write32(0xFFFFFFFF);
   SPI2.write32(0xFFFFFFFF);
+#ifdef SIMULATE
+  if(rotationPart==1)
+  {
+      Serial.println("#");
+  }
+  Serial.print("[");
   imagePointer=ledData+(part%16)*16;
-  /*for(int mcu=0;mcu<8;mcu++)
+  for(int mcu=0;mcu<8;mcu++)
   {
     imagePointer2=imagePointer+16*16*mcu;
     for(int i2=0;i2<16;i2++)
     {
-      Serial.print(*imagePointer2++,HEX);
+      Serial.print((*imagePointer2++)km+0x01000000,HEX);
       Serial.print(" ");
     }
   }
-  Serial.println();*/
+  Serial.println("]");
+#endif
 
 }
-
+#ifdef SIMULATE
+  long lastTimeSimulate=0;
+#endif
 void ledControlLoop(void * pvParameters)
 {
   while(true){
@@ -118,6 +134,11 @@ void ledControlLoop(void * pvParameters)
       {
         rotationPart-=256;
       }
+      if( rotationPartOld>rotationPart)
+      {
+        jpegImagePart=0;
+      }
+      rotationPartOld=rotationPart;
       if(rotationPart>250)
       {
         if(jpegInitialized2)
@@ -138,9 +159,18 @@ void ledControlLoop(void * pvParameters)
         jpegImagePart++;
         //Serial.println("need new");
       }
-      //Serial.print(part);
+      //Serial.println(part);
       //Serial.print(" ");
       showLeds();
     }
+    #ifdef SIMULATE
+      if(millis()-lastTimeSimulate>3000)
+      {
+        lastTimeSimulate=millis();
+        digitalWrite(26,LOW);
+        delayMicroseconds(10);
+        digitalWrite(26,HIGH);
+      }
+    #endif
   }
 }
