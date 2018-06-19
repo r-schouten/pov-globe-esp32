@@ -61,7 +61,7 @@ public:
 	uint8 status;
 	uint8 jpg_source = 0;
 	uint8_t* jpg_data;
-	uint8_t brighness=31;
+	uint8_t brighness=255;
 	uint8_t gamma=128;
 	uint8_t gamma8[256];
 	static uint8 pjpeg_callback(unsigned char* pBuf, unsigned char buf_size, unsigned char *pBytes_actually_read, void *pCallback_data);

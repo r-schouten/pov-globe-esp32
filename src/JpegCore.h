@@ -8,18 +8,16 @@ const char* password = "povGlobe";
 
 WiFiUDP Udp;
 unsigned int localUdpPort = 4210;
-struct udpData
-{
-  uint8_t  imageData[14][1460];
-  uint8_t  index=0;
-  uint8_t  flowLabel=0;
-  long StartTime;
-  int imageLength=0;
-}udpData;
-uint8_t unDecodedImage[20000];
-int imageLength=0;
+#define IMAGE_BUFFER_LENGTH 15000
+uint8_t unDecodedImage1[IMAGE_BUFFER_LENGTH];
+uint8_t unDecodedImage2[IMAGE_BUFFER_LENGTH];
 
 byte* incomingPacket;
+uint8_t* unDecodedImageIn=unDecodedImage1;
+uint8_t* unDecodedImageOut=unDecodedImage2;
+int imageLength=0;
+int finalImageLength=0;
+bool newImageReady=false;
 
 int part=0;
 int lastPart=10;
@@ -39,37 +37,9 @@ uint8_t jpegImagePart=0;
 bool jpegInitialized=false;
 bool jpegInitialized2=false;
 bool needReconstruction=true;
-
-void reconstructImage()
-{
-  long startTime=micros();
-  //Serial.println("reconstructing Image");
-  udpData.imageLength=0;
-  //for(uint8_t packet=0;packet<=udpData.index;packet++)
-  //{
-    for(uint8_t i=0;i<= udpData.index;i++)
-    {
-       //if(udpData.imageData[i][3]==packet)
-       //{
-          int length = (uint32_t) udpData.imageData[i][1] << 8 | (uint32_t) udpData.imageData[i][2];
-          memcpy(unDecodedImage+udpData.imageLength,udpData.imageData[i]+10,length);
-          //Serial.print(udpData.imageData[i][3]);
-          //Serial.print("  ");
-          //Serial.println(length);
-         udpData.imageLength+=length;
-        // break;
-       //}
-    //}
-
-  }
-  imageLength=udpData.imageLength;
-  //Serial.print("image copy time:");
-  //Serial.println(micros()-startTime);
-
-}
 void initializeJPEG()
 {
-  JpegDec.decodeArray(unDecodedImage,imageLength);
+  JpegDec.decodeArray(unDecodedImageOut,finalImageLength);
    /*String header = "width:";
    header += JpegDec.width;
    header += ", height:";
@@ -149,45 +119,44 @@ void receivePacket()
 {
   int packetSize = Udp.myRead(incomingPacket);
   if (packetSize){//when a packet is received
-      if(incomingPacket[0]==0)
+      //Serial.print("|");
+      if(incomingPacket[packetSize-1]==2)
       {
-        if(udpData.index==0)
+        uint8_t resetNext=incomingPacket[packetSize-2];
+        //Serial.print("new package: ");
+        //Serial.println(packetSize);
+        imageLength+=packetSize-5;
+        if(newImageReady)
         {
-            udpData.StartTime=micros();
+          imageLength=0;
         }
-        int length = (uint32_t) incomingPacket[1] << 8 | (uint32_t) incomingPacket[2];
-
-        if(incomingPacket[5]!=udpData.flowLabel)
+        incomingPacket=unDecodedImageIn+imageLength;
+        if(imageLength>IMAGE_BUFFER_LENGTH)
         {
-          udpData.flowLabel=incomingPacket[5];
-          udpData.index=0;
+          imageLength=0;//prevent overflow
+          //Serial.println("to big image or protocol error");
         }
-        /*Serial.print(length);
-        Serial.print("  ");
-        Serial.print(udpData.index);
-        Serial.print("  ");
-        Serial.print(incomingPacket[3]);
-        Serial.print("  ");
-        Serial.println(incomingPacket[4]);*/
-        if(incomingPacket[4]==udpData.index+1){
-
-          //Serial.printf("\nimage receiving time: %i\n",micros()-udpData.StartTime);
-          needReconstruction=true;
-          reconstructImage();
-          udpData.index=0;
-          incomingPacket=udpData.imageData[udpData.index];
-          return;
+        if(resetNext)
+        {
+          //Serial.println("reset next");
+          /*for(int i=0;i<imageLength;i++)
+          {
+            Serial.print(unDecodedImage[i],HEX);
+          }
+          Serial.println();*/
+          finalImageLength=imageLength;
+          imageLength=0;
+          incomingPacket=unDecodedImageOut;
+          newImageReady=true;
         }
-        udpData.index++;
-        incomingPacket=udpData.imageData[udpData.index];
       }
-      else if(incomingPacket[0]==1)
+      else if(incomingPacket[packetSize-1]==1)
       {
-        rotationFactor=(incomingPacket[2]-128.0)/200.0;
-        JpegDec.brighness=(223+incomingPacket[3]);
-        if(JpegDec.gamma!=incomingPacket[4])
+        rotationFactor=(incomingPacket[1]-128.0)/200.0;
+        JpegDec.brighness=(223+incomingPacket[2]);
+        if(JpegDec.gamma!=incomingPacket[3])
         {
-          JpegDec.gamma=incomingPacket[4];
+          JpegDec.gamma=incomingPacket[3];
           JpegDec.calculateGamma();
         }
       }
@@ -210,7 +179,8 @@ void jpegSetup()
   Serial.println(" connected");
   Udp.begin(localUdpPort);
    Serial.printf("Now listening at IP %s, UDP port %d\n", WiFi.localIP().toString().c_str(), localUdpPort);
-   incomingPacket=udpData.imageData[udpData.index];
+   incomingPacket=unDecodedImageIn;
+   JpegDec.gamma=128;
    JpegDec.calculateGamma();
    memset(ledData1,0,16*128*4);
    memset(ledData2,0,16*128*4);
@@ -224,6 +194,13 @@ void jpegLoop(void * pvParameters)
     if(!jpegInitialized)
     {
       jpegInitialized=true;
+      if(newImageReady)
+      {
+        newImageReady=false;
+        uint8_t *temp=unDecodedImageIn;
+        unDecodedImageIn=unDecodedImageOut;
+        unDecodedImageOut=temp;
+      }
       JpegDec.abort();
       //Serial.println("intialize jpeg");
       //uint32_t startTime3=micros();
