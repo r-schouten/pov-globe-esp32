@@ -1,3 +1,10 @@
+//Rene Schouten
+//project POV-povGlobe
+//finalized at 6/20/2018
+
+//edits:
+
+
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <SPI.h>
@@ -19,12 +26,13 @@ int imageLength=0;
 int finalImageLength=0;
 bool newImageReady=false;
 
-int part=0;
+int part=0;//where are we now
 int lastPart=10;
-double rotationPart=0;
+double rotationPart=0;//where are we now relative to rotation
 double rotationPartOld=0;
 double rotation=0;
-double rotationFactor=0;
+double rotationFactor=0;//add to rotation each mcu
+//the two led buffers
 uint32_t *ledData1 = new uint32_t[128*16];
 uint32_t *ledData2 = new uint32_t[128*16];
 //switching pointers
@@ -39,6 +47,7 @@ bool jpegInitialized2=false;
 bool needReconstruction=true;
 void initializeJPEG()
 {
+  //before reading the first mcu  the header of the jpeg should be initialized
   JpegDec.decodeArray(unDecodedImageOut,finalImageLength);
    /*String header = "width:";
    header += JpegDec.width;
@@ -56,6 +65,8 @@ void initializeJPEG()
 }
 void decodeRow()
 {
+   // read a row of the jpeg(8 mcu's). it will be placed in the ledBuffer
+   //note that the image is rotated 90 degrees because jpeg is encoded from left to right(we need top to bottom)
      uint32_t *imagePointer=ledBuffer;
      for(int mcuRow=0;mcuRow<8;mcuRow++)
      {
@@ -117,15 +128,17 @@ void decodeRow()
 }
 void receivePacket()
 {
+  //upd.myRead is a custom method which is much more coefficients
+  //myRead places a packet at the given pointer address
   int packetSize = Udp.myRead(incomingPacket);
   if (packetSize){//when a packet is received
       //Serial.print("|");
-      if(incomingPacket[packetSize-1]==2)
+      if(incomingPacket[packetSize-1]==2)//if type is 2 (jpeg image data)
       {
-        uint8_t resetNext=incomingPacket[packetSize-2];
+        uint8_t resetNext=incomingPacket[packetSize-2];//is this the last package?
         //Serial.print("new package: ");
         //Serial.println(packetSize);
-        imageLength+=packetSize-5;
+        imageLength+=packetSize-5;//place the pointer to the next position so the next packege will be placed behind this packege. -5 to overwrite the header
         if(newImageReady)
         {
           imageLength=0;
@@ -150,7 +163,7 @@ void receivePacket()
           newImageReady=true;
         }
       }
-      else if(incomingPacket[packetSize-1]==1)
+      else if(incomingPacket[packetSize-1]==1)//if type  is 1 (adjustment setting packet)
       {
         rotationFactor=(incomingPacket[1]-128.0)/200.0;
         JpegDec.brighness=(223+incomingPacket[2]);
@@ -162,11 +175,12 @@ void receivePacket()
       }
   }
 }
-IPAddress ip(192,168,137,100);
+IPAddress ip(192,168,137,100);//static ip
 IPAddress gateway(192,168,137,1);
 IPAddress subnet(255, 255, 255, 0);
 void jpegSetup()
 {
+  //static ip
   if (!WiFi.config(ip, gateway, subnet)) {
     Serial.println("STA Failed to configure");
   }
@@ -191,30 +205,30 @@ void jpegLoop(void * pvParameters)
   while(true)
   {
     receivePacket();
-    if(!jpegInitialized)
+    if(!jpegInitialized)//if ledtask ask for intializing the jpeg
     {
       jpegInitialized=true;
-      if(newImageReady)
+      if(newImageReady)//if we received a new image
       {
         newImageReady=false;
         uint8_t *temp=unDecodedImageIn;
         unDecodedImageIn=unDecodedImageOut;
         unDecodedImageOut=temp;
       }
-      JpegDec.abort();
+      JpegDec.abort();//stop reading the image, also when the image reading was not completed
       //Serial.println("intialize jpeg");
       //uint32_t startTime3=micros();
-      initializeJPEG();
+      initializeJPEG();//intitialize
       //Serial.println(micros()-startTime3);
       //needNewJPEG=false;
     }
-    if(needNewJPEG){
+    if(needNewJPEG){//if ledtask ask for a new mcu row
       needNewJPEG=false;
       //Serial.print("decode ");
       //Serial.println(jpegImagePart);
       //uint32_t startTime2=micros();
-      decodeRow();
-      rotation+=rotationFactor;
+      decodeRow();//decode the row of mcu's
+      rotation+=rotationFactor;//add a bit to the rotation
       if(rotation>255)
       {
         rotation-=256;
@@ -226,6 +240,6 @@ void jpegLoop(void * pvParameters)
       //Serial.println(micros()-startTime2);
 
     }
-    vTaskDelay(1);
+    vTaskDelay(1);//prevents error messages of freertos
   }
 }
