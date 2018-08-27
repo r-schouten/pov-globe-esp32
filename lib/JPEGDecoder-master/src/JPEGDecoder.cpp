@@ -70,7 +70,7 @@ uint8_t JPEGDecoder::pjpeg_need_bytes_callback(uint8_t* pBuf, uint8_t buf_size, 
 	//	for (int i = 0; i < n; i++) {
 				//pBuf[i] = *jpg_data++;
 		//}
-		memcpy(pBuf,jpg_data,n);
+		memcpy(pBuf,jpg_data,n);//more efficient than original
 		jpg_data+=n;
 
 
@@ -101,12 +101,13 @@ int JPEGDecoder::decode_mcu(void) {
 uint8_t gamma8[256];
 void JPEGDecoder::calculateGamma()
 {
+	//todo make more efficient
   for(float i=0.0; i<=255.0; i++) {
       gamma8[(int)i]=(int)(pow(i / 255.0,(gamma/50.0)) * 255.0 + 0.5);
   }
 }
 int JPEGDecoder::read(uint32_t *pImage) {
-
+	//after the jpeg decoder have done the decoding the colors are placed in SrcR pSrcG pSrcB memory, this method places it in the led buffer in the right order
 	int y, x;
 	uint32_t *pDst_row;
 

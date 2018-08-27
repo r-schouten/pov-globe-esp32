@@ -179,7 +179,7 @@ static uint8 gValidHuffTables;
 static uint8 gValidQuantTables;
 
 static uint8 gTemFlag;
-#define PJPG_MAX_IN_BUF_SIZE 256
+#define PJPG_MAX_IN_BUF_SIZE 512
 static uint8 gInBuf[PJPG_MAX_IN_BUF_SIZE];
 static uint8 gInBufOfs;
 static uint8 gInBufLeft;

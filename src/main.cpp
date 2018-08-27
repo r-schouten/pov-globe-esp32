@@ -6,7 +6,8 @@
 
 //edits:
 
-
+// todo:
+// wat doen die
 #include <Arduino.h>
 #include "JpegCore.h"
 #include "LedCore.h"
@@ -21,13 +22,14 @@
 void setup()
 {
   Serial.begin(2000000);
-  //the esp32 has 2 cores, core 0 for decoding jpeg and core 1 is for controlling the leds and system processes
+  //the esp32 has 2 cores, core 0 for decoding and receiving jpeg and core 1 is for controlling the leds and system processes
+  allocateMemory();
   ledControlSetup();
   jpegSetup();
   xTaskCreatePinnedToCore(
                     jpegLoop,
                     "jpeg loop",
-                    40000,
+                    5000,
                     NULL,
                     100,
                     NULL,
@@ -35,7 +37,7 @@ void setup()
   xTaskCreatePinnedToCore(
                     ledControlLoop,
                     "led control",
-                    40000,
+                    5000,
                     NULL,
                     100,
                     NULL,
